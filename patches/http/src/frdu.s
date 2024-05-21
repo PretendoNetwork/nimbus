@@ -43,16 +43,21 @@ get_nasc_environment: ; 0x1accc
 	add     r0, r0, #1                 ; add 1 to distinguish uninitialized value 0
 	ldr     r1, =nasc_environment      ; load nasc environment address to r1
 	str     r0, [r1]                   ; store the local nasc environment to memory
+	ldr     r0, =frd_handle            ; load frd_handle address to r0
+	ldr     r0, [r0]                   ; load frd_handle
+	swi     0x23                       ; close frd_handle since we dont need it anymore
+	ldr     r1, =nasc_environment      ; load nasc environment address to r1
+	ldr     r0, [r1]                   ; restore nasc environment to r0
 	b       get_nasc_environment_end   ; jump to the end
 	
-get_nasc_environment_clear: ; 0x1ad4c
+get_nasc_environment_clear: ; 0x1ad60
 	mov     r0, #0
 	
-get_nasc_environment_end: ; 0x1ad50
+get_nasc_environment_end: ; 0x1ad64
 	pop     {r4, r11, lr}
 	bx      lr
 	
-get_frd_u_handle: ; 0x1ad58
+get_frd_u_handle: ; 0x1ad6c
 	push    {r11, lr}
 
 	ldr     r0, =frd_handle            ; load frd_handle address to r0
