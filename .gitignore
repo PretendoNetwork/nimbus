@@ -54,3 +54,6 @@ target
 
 # Publish
 *.zip
+
+# MacOS
+.DS_Store

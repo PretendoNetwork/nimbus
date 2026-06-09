@@ -137,6 +137,8 @@ void DrawControls();
 // this is kinda from citro2d
 CFG_Region GetSystemRegion();
 
+void DrawScamWarning();
+
 // code thats mostly by me again
 void DrawVersionString();
 

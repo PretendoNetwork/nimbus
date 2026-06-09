@@ -345,6 +345,7 @@ bool MainUI::drawUI(MainStruct *mainStruct, C3D_RenderTarget* top_screen, C3D_Re
     }
 
     C2D_SceneBegin(top_screen);
+    DrawScamWarning();
     DrawVersionString();
     C2D_DrawSprite(&mainStruct->top);
 

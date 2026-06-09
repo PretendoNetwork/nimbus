@@ -80,22 +80,43 @@ CFG_Region GetSystemRegion() {
 	return static_cast<CFG_Region>(systemRegion);
 }
 
+void DrawScamWarning() {
+	C2D_Text c2d_text1;
+	C2D_Text c2d_text2;
+	std::string line1 = std::format("{} is free and open-source. If you paid to have it installed,", APP_TITLE);
+	std::string line2 = "you have been scammed. Demand your money back";
+	float size = 0.5f;
+	int offset = 6;
+	int horizontalOffset = offset;
+	float line2Y = (240 + 2) - offset - GetStringHeight(size, line2.c_str());
+	float line1Y = line2Y - GetStringHeight(size, line1.c_str());
+
+	C2D_TextBufClear(textBuf);
+
+	C2D_TextFontParse(&c2d_text1, font, textBuf, line1.c_str());
+	C2D_TextOptimize(&c2d_text1);
+
+	C2D_TextFontParse(&c2d_text2, font, textBuf, line2.c_str());
+	C2D_TextOptimize(&c2d_text2);
+
+	C2D_DrawText(&c2d_text1, C2D_WithColor | C2D_AlignLeft, horizontalOffset, line1Y, 0.5f, size, size, C2D_Color32(255, 255, 255, 0xFF));
+	C2D_DrawText(&c2d_text2, C2D_WithColor | C2D_AlignLeft, horizontalOffset, line2Y, 0.5f, size, size, C2D_Color32(255, 255, 255, 0xFF));
+}
+
 // code thats mostly by me again 
 void DrawVersionString() {
 	C2D_Text c2d_text;
 	std::string text = std::format("{} {}.{}.{}", APP_TITLE, VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
 	float size = 0.5f;
 	int offset = 6;
-	int bottomOffset = (240 + 2)- offset; // 3ds vertical resolution - offset, but add 2 to the vertical resolution to account for the vertical padding?
 	int horizontalOffset = 400 - offset;
-	
+
 	C2D_TextBufClear(textBuf);
-	
+
 	C2D_TextFontParse(&c2d_text, font, textBuf, text.c_str());
 	C2D_TextOptimize(&c2d_text);
 
-	C2D_DrawText(&c2d_text, C2D_WithColor | C2D_AlignRight, horizontalOffset, bottomOffset - GetStringHeight(size, text.c_str()), 0.5f, size, size, C2D_Color32(255, 255, 255, 0xFF));
-	
+	C2D_DrawText(&c2d_text, C2D_WithColor | C2D_AlignRight, horizontalOffset, offset, 0.5f, size, size, C2D_Color32(255, 255, 255, 0xFF));
 }
 
 bool GetLumaOptionByIndex(LumaConfigBitIndex index, s64 options) {
