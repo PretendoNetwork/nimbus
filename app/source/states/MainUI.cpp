@@ -1,8 +1,11 @@
+#include <array>
 #include <format>
+#include <string>
 #include <3ds.h>
 #include <sys/stat.h>
 #include "MainUI.hpp"
 #include "../sysmodules/acta.hpp"
+#include "../sysmodules/httpc.hpp"
 #include "../plgldr.h"
 
 constexpr Result ResultFPDLocalAccountNotExists = 0xC880C4ED; // FPD::LocalAccountNotExists
@@ -104,6 +107,69 @@ Result MainUI::createAccount(MainStruct *mainStruct, u8 friend_account_id, NascE
     handleResult(ACTA_UnbindServerAccount(friend_account_id, true), mainStruct, "Reset account");
 
     return rc;
+}
+
+Result MainUI::handleAzahar(u8 friend_account_id) {
+    s64 emu_id = 0;
+    svcGetSystemInfo(&emu_id, 0x20000, 0);
+
+    if (emu_id != 2) {
+        // This is not Azahar, nothing to do
+        return 0;
+    }
+
+    std::array<std::string, 3> patterns = {{
+        {"nintendowifi\\.net"},
+        {"nintendo\\.net"},
+        {"pokemon-gl\\.com"}
+    }};
+    const std::string replacement = "pretendo.cc";
+
+    Result res = httpcInit(0x1000);
+    if (friend_account_id == 2) {
+        // Register Pretendo replacement URLs
+        if (R_SUCCEEDED(res)) {
+            for (const auto& pattern : patterns) {
+                res = HTTPC_Azahar_RegisterURLReplacement(pattern.c_str(), replacement.c_str(), pattern.size(), replacement.size());
+                if (R_FAILED(res)) {
+                    // If the rule already exists clear it and register again
+                    if (res == MAKERESULT(RL_STATUS, RS_INVALIDARG, RM_HTTP, RD_ALREADY_EXISTS)) {
+                        res = HTTPC_Azahar_UnregisterURLReplacement(pattern.c_str(), pattern.size());
+                        if (R_FAILED(res)) {
+                            break;
+                        }
+                        res = HTTPC_Azahar_RegisterURLReplacement(pattern.c_str(), replacement.c_str(), pattern.size(), replacement.size());
+                        if (R_FAILED(res)) {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+    } else {
+        // Unregister Pretendo replacement URLs
+        for (const auto& pattern : patterns) {
+            res = HTTPC_Azahar_UnregisterURLReplacement(pattern.c_str(), pattern.size());
+            if (R_FAILED(res)) {
+                break;
+            } else {
+                // Result may have a non-failure info value indicating that the pattern
+                // was not registered, clear it.
+                res = 0;
+            }
+        }
+    }
+
+    if (res == MAKERESULT(RL_PERMANENT, RS_WRONGARG, RM_OS, 47)) {
+        // LLE HTTP was enabled, so custom command didn't exist
+        // the HTTP patches will be used instead, so ignore error.
+        res = 0;
+    }
+
+    httpcExit();
+    return res;
 }
 
 void MainUI::migrateAccount(MainStruct *mainStruct) {
@@ -455,6 +521,11 @@ bool MainUI::drawUI(MainStruct *mainStruct, C3D_RenderTarget* top_screen, C3D_Re
                 memset(mainStruct->errorString, 0, 256);
                 rc = createAccount(mainStruct, accountId, NascEnvironment::NASC_ENV_Test);
             }
+        }
+
+        if (R_SUCCEEDED(rc)) {
+            rc = handleAzahar(accountId);
+            LOG_NIMBUS_ERROR(mainStruct, std::format("Failed to apply Azahar configuration: {}", rc).c_str());
         }
 
         if (R_FAILED(rc)) {
