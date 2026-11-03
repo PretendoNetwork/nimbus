@@ -179,6 +179,39 @@ Result MainUI::handleAzahar(u8 friend_account_id) {
     return res;
 }
 
+// Returns true if the app should exit and reboot straight away. On failure it returns false
+// so that the error stays on screen until the user presses START to reboot.
+bool MainUI::switchNetwork(MainStruct *mainStruct) {
+    // Clear any previous logs
+    mainStruct->errorString[0] = 0;
+
+    u8 accountId = (u8)mainStruct->buttonSelected + 1; // by default set accountId to nasc environment + 1
+
+    Result rc = unloadAccount(mainStruct);
+    if (R_SUCCEEDED(rc)) {
+        rc = switchAccounts(mainStruct, accountId);
+        if (rc == ResultFPDLocalAccountNotExists && accountId == 2) {
+            // Clear the error to allow createAccount to override it
+            memset(mainStruct->errorString, 0, 256);
+            rc = createAccount(mainStruct, accountId, NascEnvironment::NASC_ENV_Test);
+        }
+    }
+
+    if (R_SUCCEEDED(rc)) {
+        rc = handleAzahar(accountId);
+        LOG_NIMBUS_ERROR(mainStruct, std::format("Failed to apply Azahar configuration: {}", rc).c_str());
+    }
+
+    mainStruct->needsReboot = true;
+
+    if (R_FAILED(rc)) {
+        aptSetHomeAllowed(false);
+        return false;
+    }
+
+    return true;
+}
+
 void MainUI::migrateAccount(MainStruct *mainStruct) {
     Result rc = 0;
     u32 pretendo_account_index = 0;
@@ -444,7 +477,11 @@ void MainUI::updatePrompt(MainStruct* mainStruct, u32 kDown)
     if (!mainStruct->prompt.active)
         return;
 
-    if (kDown & KEY_A) {
+    // Only the network switch notice can be confirmed by tapping. Other prompts may be
+    // destructive (e.g. unlinking a PNID), so a stray tap must not confirm them.
+    const bool tapConfirms = mainStruct->prompt.status == PromptStatus::NetworkSwitch && (kDown & KEY_TOUCH);
+
+    if ((kDown & KEY_A) || tapConfirms) {
         mainStruct->prompt.result = PromptResult::Yes;
     }
     else if (kDown & KEY_B) {
@@ -484,7 +521,8 @@ void MainUI::drawPrompt(MainStruct* mainStruct)
     C2D_TextFontParse(&msgText, font, textBuf, mainStruct->prompt.message.c_str());
     C2D_TextOptimize(&msgText);
 
-    C2D_TextFontParse(&hintText, font, textBuf, "A: Yes    B: Cancel");
+    const bool isNetworkSwitch = mainStruct->prompt.status == PromptStatus::NetworkSwitch;
+    C2D_TextFontParse(&hintText, font, textBuf, isNetworkSwitch ? "A/Tap: OK    B: Cancel" : "A: Yes    B: Cancel");
     C2D_TextOptimize(&hintText);
 
     // Draw (z <= 1.0!!)
@@ -664,9 +702,13 @@ bool MainUI::drawUI(MainStruct *mainStruct, C3D_RenderTarget* top_screen, C3D_Re
 
     if (mainStruct->prompt.active) {
         if (mainStruct->prompt.result == PromptResult::Yes) {
+            bool exit = false;
             switch (mainStruct->prompt.status) {
                 case PromptStatus::PNIDUnlink:
                     unlinkPNID(mainStruct);
+                    break;
+                case PromptStatus::NetworkSwitch:
+                    exit = switchNetwork(mainStruct);
                     break;
                 default:
                     LOG_NIMBUS_ERROR(mainStruct, "Unknown prompt called.");
@@ -674,7 +716,7 @@ bool MainUI::drawUI(MainStruct *mainStruct, C3D_RenderTarget* top_screen, C3D_Re
             }
             mainStruct->prompt.result = PromptResult::None;
             mainStruct->prompt.active = false;
-            return false;
+            return exit;
         }
         if (mainStruct->prompt.result == PromptResult::No) {
             mainStruct->prompt.result = PromptResult::None;
@@ -773,39 +815,13 @@ bool MainUI::drawUI(MainStruct *mainStruct, C3D_RenderTarget* top_screen, C3D_Re
     }
 
     if (mainStruct->buttonWasPressed) {
-        // Clear any previous logs
-        mainStruct->errorString[0] = 0;
+        mainStruct->buttonWasPressed = false;
 
         // If the chosen account is the one we are already logged into, exit without rebooting
         if (mainStruct->currentAccount == mainStruct->buttonSelected) return true;
 
-        u8 accountId = (u8)mainStruct->buttonSelected + 1; // by default set accountId to nasc environment + 1
-
-        Result rc = unloadAccount(mainStruct);
-        if (R_SUCCEEDED(rc)) {
-            rc = switchAccounts(mainStruct, accountId);
-            if (rc == ResultFPDLocalAccountNotExists && accountId == 2) {
-                // Clear the error to allow createAccount to override it
-                memset(mainStruct->errorString, 0, 256);
-                rc = createAccount(mainStruct, accountId, NascEnvironment::NASC_ENV_Test);
-            }
-        }
-
-        if (R_SUCCEEDED(rc)) {
-            rc = handleAzahar(accountId);
-            LOG_NIMBUS_ERROR(mainStruct, std::format("Failed to apply Azahar configuration: {}", rc).c_str());
-        }
-
-        if (R_FAILED(rc)) {
-            aptSetHomeAllowed(false);
-            mainStruct->needsReboot = true;
-            mainStruct->buttonWasPressed = false;
-            return false;
-        }
-
-        mainStruct->needsReboot = true;
-
-        return true;
+        // Switching networks reboots the console, so let the user know before anything happens
+        openPrompt(mainStruct, "The system will now reboot.", PromptStatus::NetworkSwitch);
     }
 
     return false;

@@ -43,7 +43,8 @@ enum class PromptResult {
 
 enum class PromptStatus {
 	Unknown,
-    PNIDUnlink
+    PNIDUnlink,
+    NetworkSwitch
 };
 
 struct PromptState {
